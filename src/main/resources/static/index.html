@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screening de personas</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #fff; --text: #1b1f24; --muted: #5b6470; --border: #d8dde3;
+    --accent: #1f5fbf; --clear: #1d7a46; --review: #a86400; --high: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171b; --surface: #1d2126; --text: #e8eaed; --muted: #9aa3ad; --border: #343a41;
+      --accent: #6ea3f0; --clear: #4fc283; --review: #e0a040; --high: #f07a72;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  form, .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  input { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+  .full { grid-column: 1 / -1; }
+  button { margin-top: 14px; font: inherit; font-weight: 600; padding: 9px 18px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: wait; }
+  #result { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: 700; font-size: 13px; color: #fff; }
+  .CLEAR { background: var(--clear); } .REVIEW { background: var(--review); } .HIGH { background: var(--high); }
+  .match h3 { margin: 0 0 6px; font-size: 16px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .tag { display: inline-block; border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; margin: 2px 4px 2px 0; font-size: 12px; }
+  a { color: var(--accent); }
+  .error { border-color: var(--high); color: var(--high); }
+  .note { color: var(--muted); font-size: 13px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Screening de personas</h1>
+  <p class="sub">Búsqueda en listas abiertas de sanciones (OFAC, ONU, UE, Reino Unido), PEPs y listas de delitos vía OpenSanctions.</p>
+
+  <form id="form">
+    <div class="grid">
+      <label class="full">Nombre completo *<input name="fullName" required autocomplete="off"></label>
+      <label>Fecha de nacimiento<input name="birthDate" placeholder="AAAA o AAAA-MM-DD"></label>
+      <label>Nacionalidad<input name="nationality" placeholder="ec" maxlength="2"></label>
+      <label>Cédula / pasaporte<input name="idNumber"></label>
+    </div>
+    <button type="submit">Buscar</button>
+  </form>
+
+  <div id="result" aria-live="polite"></div>
+  <p class="note">Los resultados son candidatos para revisión de un analista, no una determinación sobre la persona.</p>
+</main>
+<script>
+  const RISK = { CLEAR: 'Sin coincidencias', REVIEW: 'Requiere revisión', HIGH: 'Riesgo alto' };
+  const form = document.getElementById('form');
+  const out = document.getElementById('result');
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const tags = list => (list || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const body = Object.fromEntries([...new FormData(form)].filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()]));
+    const button = form.querySelector('button');
+    button.disabled = true;
+    out.innerHTML = '<div class="card">Buscando…</div>';
+    try {
+      const res = await fetch('screening/persons', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error(`Error ${res.status} del servidor`);
+      render(await res.json());
+    } catch (err) {
+      out.innerHTML = `<div class="card error">No se pudo completar la búsqueda: ${esc(err.message)}</div>`;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  function render(r) {
+    const head = `<div class="card"><span class="badge ${esc(r.riskLevel)}">${esc(RISK[r.riskLevel] || r.riskLevel)}</span>
+      <span class="meta">&nbsp;${r.matches.length} coincidencia(s) para «${esc(r.query.fullName)}»</span></div>`;
+    const items = r.matches.map(m => `<div class="card match">
+      <h3>${esc(m.name)} ${m.strongMatch ? '<span class="badge HIGH">coincidencia fuerte</span>' : ''}</h3>
+      <div class="meta">Puntuación: ${(m.score * 100).toFixed(0)}%</div>
+      <div>Temas: ${tags(m.topics) || '—'}</div>
+      <div>Países: ${tags(m.countries) || '—'}</div>
+      <div>Listas: ${tags(m.datasets)}</div>
+      <a href="${esc(m.sourceUrl)}" target="_blank" rel="noopener">Ver registro original</a>
+    </div>`).join('');
+    out.innerHTML = head + items;
+  }
+</script>
+</body>
+</html>

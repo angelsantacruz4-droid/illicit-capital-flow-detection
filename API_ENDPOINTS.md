@@ -60,6 +60,25 @@ The base URL for all endpoints is: `https://api.example.com/v1`
 **Response:**
 - `204 No Content`: Indicates the transaction was successfully deleted.
 
+### 6. `POST /screening/persons`
+**Description:** Screens a person against open-source lists (sanctions, PEPs, criminal watchlists) through the [OpenSanctions](https://www.opensanctions.org) match API, which aggregates OFAC SDN, UN, EU, UK and national lists, including Ecuadorian PEPs.
+
+Requires the `OPENSANCTIONS_API_KEY` environment variable (free for non-commercial use, licensed for commercial use).
+
+**Request Body:**
+- `fullName` (required): Full name of the person.
+- `birthDate` (optional): `YYYY` or `YYYY-MM-DD`.
+- `nationality` (optional): ISO country code, e.g. `ec`.
+- `idNumber` (optional): Cédula or passport number.
+
+**Response:**
+- `200 OK`: `riskLevel` (`CLEAR`, `REVIEW` for PEPs/partial matches, `HIGH` for strong matches on sanctions or crime lists) and the list of `matches` with score, topics, source datasets and a link to the source record.
+- `400 Bad Request`: If `fullName` is missing.
+
+Results are candidates for analyst review, not a determination about the person.
+
+A browser search page is served at `/api/index.html` (e.g. `http://localhost:8080/api/index.html`).
+
 ## Example Usage
 
 ### 1. Retrieve Transactions
@@ -84,6 +103,13 @@ curl -X PUT https://api.example.com/v1/api/transactions/1 \
 ### 4. Delete a Transaction
 ```bash
 curl -X DELETE https://api.example.com/v1/api/transactions/1
+```
+
+### 5. Screen a Person
+```bash
+curl -X POST https://api.example.com/v1/api/screening/persons \
+-H "Content-Type: application/json" \
+-d '{"fullName": "Juan Perez", "nationality": "ec", "birthDate": "1970"}'
 ```
 
 ## Conclusion

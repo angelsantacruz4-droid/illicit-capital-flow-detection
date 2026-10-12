@@ -1,4 +1,6 @@
-import javax.persistence.*;
+package com.example.illicitcapitalflow.model;
+
+import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
