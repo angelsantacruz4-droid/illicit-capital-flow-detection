@@ -77,6 +77,8 @@ Requires the `OPENSANCTIONS_API_KEY` environment variable (free for non-commerci
 
 Results are candidates for analyst review, not a determination about the person.
 
+A browser search page is served at `/api/index.html` (e.g. `http://localhost:8080/api/index.html`).
+
 ## Example Usage
 
 ### 1. Retrieve Transactions
